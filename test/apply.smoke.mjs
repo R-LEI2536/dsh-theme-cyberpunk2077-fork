@@ -204,6 +204,14 @@ test('apply registers the dark theme, injects the token sheet and disposes clean
     assert.equal(booted.win.document.documentElement.style.colorScheme, 'dark')
     assert.equal(booted.win.document.body.hasAttribute('data-ds-dark-theme'), true)
 
+    // Regression guard: [role='dialog'] also matches full-size containers (the
+    // settings panel carries it), and clip-path — unlike overflow — clips
+    // position:fixed descendants, so a modal portaled into that container
+    // (archive-manager → .dsham_settings) is cut down to the container's box.
+    const dialogRule = /\[role='dialog'\][^{]*\{([^}]*)\}/u.exec(style.textContent)
+    assert.ok(dialogRule, "dialog rule is still injected")
+    assert.doesNotMatch(dialogRule[1], /clip-path/u, "dialogs must not clip portaled fixed children")
+
     assert.equal(cleanups.length, 1)
     cleanups[0]()
     assert.equal(calls.disposed, 1)
