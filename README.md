@@ -6,6 +6,8 @@
 
 > 欢迎来到夜之城。你的 DeepSeek Harness 已经被改装过了。
 
+> ⚠️ **要求 DSH 0.2.0-rc.1+**（peer `@deepseek-ai/dsh-client-ui-theme: ^0.2.0-rc.1`）。0.1.x 宿主上本插件会被 DSH 的兼容门**整包跳过**，界面不会有任何变化。
+
 Cyberpunk 2077（夜之城）风格的 DSH Web UI 主题。纯浏览器客户端插件，零音频资源——所有声音都是 Web Audio 实时合成，不下载一个字节的音频文件。
 
 ![NIGHT CITY — screenshot](assets/screenshot.png)
@@ -22,19 +24,19 @@ Cyberpunk 2077（夜之城）风格的 DSH Web UI 主题。纯浏览器客户端
 dsh plugin --profile web add dsh-theme-cyberpunk2077
 ```
 
-然后把主题行挂进 profile 补丁层（`~/.dsh/profiles/web/cordis.patch.yml`）：
+0.2.0 的 `dsh plugin` 会把包写进 profile 的 `dsh.profile.bundles`，并自动套用插件自带的 `cordis.patch.yml`（行 id `ui-theme-cyberpunk`）——**不用再手改 profile 补丁**。重启 `dsh web`，NIGHT CITY 开机转场之后，欢迎来到 2077。
 
-```yaml
-- insert:
-    - id: ui-theme-cyberpunk
-      name: 'dsh-theme-cyberpunk2077'
-```
+> 🧰 **手动兜底**（仅在插件管理器 / CLI 不可用时）：把 `dsh-theme-cyberpunk2077` 加进 `~/.dsh/profiles/web/package.json` 的 `dsh.profile.bundles`，或在 `~/.dsh/profiles/web/cordis.patch.yml` 里插入同一行：
+>
+> ```yaml
+> - insert:
+>     - id: ui-theme-cyberpunk
+>       name: 'dsh-theme-cyberpunk2077'
+> ```
 
-重启 `dsh web`，NIGHT CITY 开机转场之后，欢迎来到 2077。
+> 💡 **装不上 / 主题不生效？** 先确认插件是 **≥ 0.2.0**（`npm view dsh-theme-cyberpunk2077 version`）且宿主是 **0.2.0-rc.1+**。本插件声明了 peer，不满足时 DSH 会把整个 bundle 跳过，启动日志里出现 `dsh: skipping profile bundle "dsh-theme-cyberpunk2077"`。0.1.3 及更早版本则是漏打 `cordis.patch.yml`，装完直接启动失败。
 
-> 💡 **装不上 / 启动崩溃？** 确认装的是 **≥ 0.1.4**（`npm view dsh-theme-cyberpunk2077 version`）。0.1.3 及更早版本发布时漏打了 `cordis.patch.yml`，安装后会因找不到补丁文件启动失败——升级到 0.1.4 即可。
-
-> 想微调？右下角 `DECK` 按钮打开控制面板，每个特效独立开关；`SND` 一键静音全部。
+> 想微调？右下角 `DECK` 按钮打开控制面板，每个特效独立开关；`SND` 一键静音全部。主题会**硬锁夜之城暗色调色板**：设置页 Appearance 里点 Light / Dark 不会改变外观（这是主题的预期行为），想回官方配色就禁用插件行。
 
 ## 🌆 视觉：夜之城的皮
 
@@ -79,18 +81,46 @@ dsh plugin --profile web add dsh-theme-cyberpunk2077
 ## 📁 项目结构
 
 ```
-package.json     # dsh.bundle + dsh.client manifest（platform: web）
+package.json     # dsh.bundle + dsh.client manifest（platform: web, immediately: true）
 cordis.patch.yml # 一键安装的补丁层
 lib/index.js     # 宿主端（空壳，让插件行挂载）
 lib/client.js    # 浏览器 bundle：主题 + 全部子系统
+scripts/         # audit-tokens.mjs：对照 DSH 源码校验 token 覆盖
+test/            # apply.smoke.mjs：jsdom 冒烟测试（node --test）
 assets/          # README 截图
 ```
 
 ## 🧹 想卸载？
 
-把 `cordis.patch.yml` 里的 `ui-theme-cyberpunk` 行删掉，再移除依赖并重启 `dsh web` 即可。夜之城随时欢迎你回来。
+```bash
+dsh plugin --profile web remove dsh-theme-cyberpunk2077
+```
 
-> ⚠️ **`dsh plugin rm` 的已知坑**：它不会自动清掉 `cordis.patch.yml` 里已插入的主题行。卸载后如果重启 `dsh web` 报找不到包，手动删掉 profile 补丁里的 `ui-theme-cyberpunk` 行（见上），再重启一次就好。另注意 `0.1.3` 及更早版本存在安装即崩溃的问题，卸载请认准 `0.1.4+`。
+0.2.0 的插件管理器会把依赖和 `dsh.profile.bundles` 里的条目一起清掉；主题行来自插件自带的 `cordis.patch.yml`，随包一起消失——重启 `dsh web` 即可。夜之城随时欢迎你回来。
+
+> 如果你是按上文「手动兜底」插进 profile `cordis.patch.yml` 的，需要自己把 `ui-theme-cyberpunk` 那行删掉。
+
+## 🧪 开发者自检
+
+主题是纯 token 覆盖层：DSH 每次改版都可能新增/改名 `--dsw-*`，所以仓库里有两个零依赖守卫：
+
+```bash
+node scripts/audit-tokens.mjs        # token 覆盖：死覆盖 / 漏光（默认对照 ../deepseek-harness/packages/client）
+node --test                          # jsdom 冒烟：注册契约 + 注入样式 + HMR 幂等
+```
+
+`audit-tokens.mjs` 支持 `--dsh-source <path>` / `DSH_SOURCE` 指向别的 DSH checkout；冒烟测试默认从 `../deepseek-harness/node_modules` 取 jsdom，可用 `DSH_DEPS_DIR` 覆盖。
+
+## 🧾 更新日志
+
+### 0.2.0 — 对齐 DSH 0.2.0-rc.2
+
+- **token 层**：补齐 29 个 `--dsw-alias-*`（文件 diff、文档预览、思考/微光、turn trigger、onboarding、设置卡、菜单图标、switch、toast 等），新增 `--dsw-menu-surface-fill`（`MenuSurface` 直读，此前菜单漏官方灰）、`--dsw-focus-ring-color`、`--dsw-elevation-stroke-color`、4 个 diff alpha 静态色与 2 个中性色。alias/specific 覆盖 **118/118**，0 死覆盖。
+- **字体**：`--dsw-font-family` / `--dsw-font-family-brand` 改到 `:root`（上游在 `:root` 求值品牌字体，原先设在 `body` 到不了）。
+- **选择器**：修掉 0.2.0 已不存在的 `railFish`、`detailsCol` 两个钩子；右栏 HUD 角标改锚 `data-sidebar-right-open` 稳定属性。
+- **注册**：`ctx.theme.register` 幂等化并回收其 disposer，客户端 HMR 重载不再报 `already registered`。
+- **清单**：声明 peer `@deepseek-ai/dsh-client-ui-theme ^0.2.0-rc.1`；`dsh.client.immediately: true` 提前预取，减少首屏默认主题闪烁。
+- **工具**：新增 `scripts/audit-tokens.mjs`、`test/apply.smoke.mjs`。
 
 ## 📜 许可证
 
